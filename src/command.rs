@@ -1,5 +1,8 @@
+use std::{ops::Deref, process};
+
 use git2::Repository;
 use regex::Regex;
+use url::Url;
 
 #[derive(clap::Subcommand, Debug, Clone)]
 pub enum Command {
@@ -33,6 +36,9 @@ pub enum Command {
         pattern: String,
     },
 
+    /// Clear all local changes to the current branch
+    Clear,
+
     /// Commit currently-staged changes
     Commit {
         /// Commit message
@@ -62,21 +68,20 @@ pub enum Command {
 
 impl Command {
     pub fn perform(self) -> Result<(), String> {
-        match self {
-            Command::Clone { url } => {
-                let cwd = std::env::current_dir().unwrap();
-                let name = repository_name(&url).unwrap();
+        // let cwd = std::env::current_dir().unwrap();
 
-                Repository::clone(&url, &cwd.join(name))
-                    .map(|_| ())
-                    .map_err(|e| format!("failed to clone: {}", e))
-            }
-            Command::Sync => todo!(),
+        match self {
+            Command::Clone { url } => git(&["clone", &url]),
+            Command::Sync => sync(),
             Command::Status => todo!(),
             Command::History => todo!(),
-            Command::Stage { pattern } => todo!(),
-            Command::Unstage { pattern } => todo!(),
-            Command::Commit { message } => todo!(),
+            Command::Stage { pattern } => git(&["add", &pattern]),
+            Command::Unstage { pattern } => git(&["reset", &pattern]),
+            Command::Clear => git(&["reset", "--hard"]),
+            Command::Commit { message } => {
+                git(&["commit", "-m", &message])?;
+                sync()
+            }
             Command::Switch { branch_name } => todo!(),
             Command::Branch { branch_name } => todo!(),
             Command::Undo => todo!(),
@@ -87,17 +92,86 @@ impl Command {
     }
 }
 
-struct RemoteUrl {
-    pub url: String,
-    pub url_type: RemoteUrlType,
+fn git(args: &[&str]) -> Result<(), String> {
+    process::Command::new("git")
+        .args(args)
+        .output()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
 }
 
-enum RemoteUrlType {
-    Ssh,    // git@github.com:brundonsmith/rust_lisp.git
-    Https,  // https://github.com/brundonsmith/rust_lisp.git
-    Github, // https://github.com/brundonsmith/rust_lisp
-    Gitlab,
+fn sync() -> Result<(), String> {
+    git(&["fetch"])?;
+    git(&["pull", "--rebase"])?;
+    git(&["push"])
 }
+
+// pub fn git_credentials_callback(
+//     user: &str,
+//     user_from_url: Option<&str>,
+//     cred: git2::CredentialType,
+// ) -> Result<git2::Cred, git2::Error> {
+//     let user = user_from_url.unwrap_or("git");
+
+//     if cred.contains(git2::CredentialType::USERNAME) {
+//         return git2::Cred::username(user);
+//     }
+
+//     match std::env::var("GPM_SSH_KEY") {
+//         Ok(k) => {
+//             println!(
+//                 "authenticate with user {} and private key located in {}",
+//                 user, k
+//             );
+//             git2::Cred::ssh_key(user, None, std::path::Path::new(&k), None)
+//         }
+//         _ => Err(git2::Error::from_str(
+//             "unable to get private key from GPM_SSH_KEY",
+//         )),
+//     }
+// }
+
+// fn get_or_init_repo(remote: &str) -> Result<git2::Repository, git2::Error> {
+//     let data_url = match Url::parse(remote) {
+//         Ok(data_url) => data_url,
+//         Err(e) => panic!("failed to parse url: {}", e),
+//     };
+//     let path = std::env::current_dir()
+//         .unwrap()
+//         .join(data_url.host_str().unwrap())
+//         .join(&data_url.path()[1..]);
+
+//     if path.exists() {
+//         println!("use existing repository {}", path.to_str().unwrap());
+//         return git2::Repository::open(path);
+//     }
+
+//     let mut callbacks = git2::RemoteCallbacks::new();
+//     callbacks.credentials(git_credentials_callback);
+
+//     let mut opts = git2::FetchOptions::new();
+//     opts.remote_callbacks(callbacks);
+//     opts.download_tags(git2::AutotagOption::All);
+
+//     let mut builder = git2::build::RepoBuilder::new();
+//     builder.fetch_options(opts);
+//     builder.branch("master");
+
+//     println!(
+//         "start cloning repository {} in {}",
+//         remote,
+//         path.to_str().unwrap()
+//     );
+
+//     match builder.clone(remote, &path) {
+//         Ok(r) => {
+//             println!("repository cloned");
+
+//             Ok(r)
+//         }
+//         Err(e) => Err(e),
+//     }
+// }
 
 fn repository_name(url: &str) -> Result<String, ()> {
     let expr = Regex::new(r"([^/.:]+)(?:\.git)?$").unwrap();

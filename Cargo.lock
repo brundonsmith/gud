@@ -117,6 +117,7 @@ dependencies = [
  "clap",
  "git2",
  "regex",
+ "url",
 ]
 
 [[package]]
