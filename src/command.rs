@@ -82,7 +82,11 @@ impl Command {
                 git(&["commit", "-m", &message])?;
                 sync()
             }
-            Command::Switch { branch_name } => todo!(),
+            Command::Switch { branch_name } => {
+                stash_branch_changes()?;
+                git(&["checkout", &branch_name])?;
+                pop_stashed_branch_changes()
+            }
             Command::Branch { branch_name } => todo!(),
             Command::Undo => todo!(),
             Command::Redo => todo!(),
@@ -93,10 +97,14 @@ impl Command {
 }
 
 fn git(args: &[&str]) -> Result<(), String> {
+    git_with_output(args).map(|_| ())
+}
+
+fn git_with_output(args: &[&str]) -> Result<String, String> {
     process::Command::new("git")
         .args(args)
         .output()
-        .map(|_| ())
+        .map(|o| String::from_utf8(o.stdout).unwrap())
         .map_err(|e| e.to_string())
 }
 
@@ -104,6 +112,28 @@ fn sync() -> Result<(), String> {
     git(&["fetch"])?;
     git(&["pull", "--rebase"])?;
     git(&["push"])
+}
+
+fn get_branch_name() -> Result<String, String> {
+    git_with_output(&["rev-parse", "--abbrev-ref", "HEAD"])
+}
+
+fn stash_branch_changes() -> Result<(), String> {
+    let branch_name = get_branch_name()?;
+    let stash_name = stash_name_for_branch(&branch_name);
+
+    git(&["stash", "push", "-m", &stash_name])
+}
+
+fn pop_stashed_branch_changes() -> Result<(), String> {
+    let branch_name = get_branch_name()?;
+    let stash_name = stash_name_for_branch(&branch_name);
+
+    git(&["stash", "pop", &stash_name])
+}
+
+fn stash_name_for_branch(branch_name: &str) -> String {
+    format!("gud_local_changes:{}", branch_name)
 }
 
 // pub fn git_credentials_callback(
