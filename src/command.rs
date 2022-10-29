@@ -100,11 +100,26 @@ fn git(args: &[&str]) -> Result<(), String> {
     git_with_output(args).map(|_| ())
 }
 
+const DEBUG: bool = true;
+
 fn git_with_output(args: &[&str]) -> Result<String, String> {
     process::Command::new("git")
         .args(args)
         .output()
-        .map(|o| String::from_utf8(o.stdout).unwrap())
+        .map(|o| {
+            let out_str = String::from_utf8(o.stdout).unwrap();
+
+            if DEBUG {
+                println!(
+                    "git {:?}:\n\t{}\n\t{}",
+                    args,
+                    out_str,
+                    String::from_utf8(o.stderr).unwrap()
+                );
+            }
+
+            out_str
+        })
         .map_err(|e| e.to_string())
 }
 
