@@ -105,10 +105,14 @@ impl Command {
                 Ok(())
             }
             Command::Switch { branch_name } => switch(&branch_name),
-            Command::Branch { branch_name } => todo!(),
+            Command::Branch { branch_name } => {
+                stash_branch_changes(true)?;
+                git(&["checkout", "-b", &branch_name])?;
+                Ok(())
+            }
             Command::Undo => todo!(),
             Command::Redo => todo!(),
-            Command::Rewrite => todo!(),
+            Command::Rewrite => todo!(), // TODO: Present interactive TUI instead of using system editor
             Command::Rebase { other_branch } => {
                 let current_branch = get_branch_name()?;
                 switch(&other_branch)?;
@@ -167,7 +171,7 @@ fn sync() -> Result<(usize, usize), String> {
 }
 
 fn switch(branch_name: &str) -> Result<(), String> {
-    stash_branch_changes()?;
+    stash_branch_changes(false)?;
     git(&["checkout", branch_name])?;
     pop_stashed_branch_changes()
 }
@@ -184,12 +188,17 @@ fn get_branch_name() -> Result<String, String> {
     git_with_output(&["rev-parse", "--abbrev-ref", "HEAD"]).map(|o| o.trim().to_owned())
 }
 
-fn stash_branch_changes() -> Result<(), String> {
+fn stash_branch_changes(keep: bool) -> Result<(), String> {
     let branch_name = get_branch_name()?;
     let stash_name = stash_name_for_branch(&branch_name);
 
     stage(".")?;
-    git(&["stash", "push", "-m", &stash_name])
+    if keep {
+        git(&["stash", "push", "-k", "-m", &stash_name])?;
+        unstage(".")
+    } else {
+        git(&["stash", "push", "-m", &stash_name])
+    }
 }
 
 fn pop_stashed_branch_changes() -> Result<(), String> {
