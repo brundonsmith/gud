@@ -1,0 +1,11 @@
+[package]
+name = "gud"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+git2 = "0.15.0"
+clap = { version = "4.0.18", features = ["derive"] }
+regex = "1"
