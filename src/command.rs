@@ -4,6 +4,8 @@ use git2::Repository;
 use regex::Regex;
 use url::Url;
 
+use crate::DEBUG;
+
 #[derive(clap::Subcommand, Debug, Clone)]
 pub enum Command {
     /// Clone a repository
@@ -68,12 +70,18 @@ pub enum Command {
 
 impl Command {
     pub fn perform(self) -> Result<(), String> {
-        // let cwd = std::env::current_dir().unwrap();
-
         match self {
             Command::Clone { url } => git(&["clone", &url]),
             Command::Sync => sync(),
-            Command::Status => todo!(),
+            Command::Status => {
+                let branch_name = get_branch_name()?;
+                let output = git_with_output(&["status", "--short"])?;
+
+                println!("On branch {}", branch_name);
+                println!("{}", output);
+
+                Ok(())
+            }
             Command::History => todo!(),
             Command::Stage { pattern } => stage(&pattern),
             Command::Unstage { pattern } => unstage(&pattern),
@@ -100,8 +108,6 @@ fn git(args: &[&str]) -> Result<(), String> {
     git_with_output(args).map(|_| ())
 }
 
-const DEBUG: bool = true;
-
 fn git_with_output(args: &[&str]) -> Result<String, String> {
     process::Command::new("git")
         .args(args)
@@ -125,8 +131,18 @@ fn git_with_output(args: &[&str]) -> Result<String, String> {
 
 fn sync() -> Result<(), String> {
     git(&["fetch"])?;
-    git(&["pull", "--rebase"])?;
-    git(&["push"])
+    let ahead = commits_ahead()?;
+    let behind = commits_behind()?;
+
+    if ahead == 0 && behind == 0 {
+        println!("Already up to date");
+    } else {
+        git(&["pull", "--rebase"])?;
+        git(&["push"])?;
+        println!("Pushed {} commits and pulled {} commits", ahead, behind);
+    }
+
+    Ok(())
 }
 
 fn stage(pattern: &str) -> Result<(), String> {
@@ -186,6 +202,28 @@ fn list_stashes() -> Result<Vec<Stash>, String> {
             message: capt.get(2).unwrap().as_str().to_owned(),
         })
         .collect())
+}
+
+fn commits_ahead() -> Result<usize, String> {
+    let branch_name = get_branch_name()?;
+    let output = git_with_output(&[
+        "rev-list",
+        &format!("origin/{}..{}", branch_name, branch_name),
+        "--count",
+    ])?;
+
+    output.trim().parse::<usize>().map_err(|e| e.to_string())
+}
+
+fn commits_behind() -> Result<usize, String> {
+    let branch_name = get_branch_name()?;
+    let output = git_with_output(&[
+        "rev-list",
+        &format!("{}..origin/{}", branch_name, branch_name),
+        "--count",
+    ])?;
+
+    output.trim().parse::<usize>().map_err(|e| e.to_string())
 }
 
 #[test]

@@ -4,6 +4,8 @@ use command::Command;
 mod command;
 mod repository;
 
+pub const DEBUG: bool = false;
+
 #[derive(Parser, Debug, Clone)]
 // #[command(author, version, about, long_about = None)]
 struct Args {
@@ -14,7 +16,9 @@ struct Args {
 fn main() -> Result<(), String> {
     let args = Args::parse();
 
-    println!("{:?}", args);
+    if DEBUG {
+        println!("{:?}", args);
+    }
 
     args.command.perform()
 }
