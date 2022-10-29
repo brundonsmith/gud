@@ -123,7 +123,7 @@ fn unstage(pattern: &str) -> Result<(), String> {
 }
 
 fn get_branch_name() -> Result<String, String> {
-    git_with_output(&["rev-parse", "--abbrev-ref", "HEAD"])
+    git_with_output(&["rev-parse", "--abbrev-ref", "HEAD"]).map(|o| o.trim().to_owned())
 }
 
 fn stash_branch_changes() -> Result<(), String> {
