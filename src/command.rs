@@ -75,8 +75,8 @@ impl Command {
             Command::Sync => sync(),
             Command::Status => todo!(),
             Command::History => todo!(),
-            Command::Stage { pattern } => git(&["add", &pattern]),
-            Command::Unstage { pattern } => git(&["reset", &pattern]),
+            Command::Stage { pattern } => stage(&pattern),
+            Command::Unstage { pattern } => unstage(&pattern),
             Command::Clear => git(&["reset", "--hard"]),
             Command::Commit { message } => {
                 git(&["commit", "-m", &message])?;
@@ -114,6 +114,14 @@ fn sync() -> Result<(), String> {
     git(&["push"])
 }
 
+fn stage(pattern: &str) -> Result<(), String> {
+    git(&["add", pattern])
+}
+
+fn unstage(pattern: &str) -> Result<(), String> {
+    git(&["reset", pattern])
+}
+
 fn get_branch_name() -> Result<String, String> {
     git_with_output(&["rev-parse", "--abbrev-ref", "HEAD"])
 }
@@ -122,6 +130,7 @@ fn stash_branch_changes() -> Result<(), String> {
     let branch_name = get_branch_name()?;
     let stash_name = stash_name_for_branch(&branch_name);
 
+    stage(".")?;
     git(&["stash", "push", "-m", &stash_name])
 }
 
@@ -129,6 +138,7 @@ fn pop_stashed_branch_changes() -> Result<(), String> {
     let branch_name = get_branch_name()?;
     let stash_name = stash_name_for_branch(&branch_name);
 
+    unstage(".")?;
     git(&["stash", "pop", &stash_name])
 }
 
