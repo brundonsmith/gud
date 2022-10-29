@@ -138,12 +138,51 @@ fn pop_stashed_branch_changes() -> Result<(), String> {
     let branch_name = get_branch_name()?;
     let stash_name = stash_name_for_branch(&branch_name);
 
-    unstage(".")?;
-    git(&["stash", "pop", &stash_name])
+    let stash = list_stashes()?
+        .into_iter()
+        .find(|s| s.message.contains(&stash_name));
+
+    if let Some(stash) = &stash {
+        git(&["stash", "pop", &stash.reference])?;
+        unstage(".")
+    } else {
+        Ok(())
+    }
 }
 
 fn stash_name_for_branch(branch_name: &str) -> String {
     format!("gud_local_changes:{}", branch_name)
+}
+
+struct Stash {
+    pub reference: String,
+    pub message: String,
+}
+
+fn list_stashes() -> Result<Vec<Stash>, String> {
+    let output = git_with_output(&["stash", "list"])?;
+
+    let pattern = Regex::new(r"(stash@\{[0-9]+\}): (On [^\n]*)").unwrap();
+
+    Ok(pattern
+        .captures_iter(&output)
+        .map(|capt| Stash {
+            reference: capt.get(1).unwrap().as_str().to_owned(),
+            message: capt.get(2).unwrap().as_str().to_owned(),
+        })
+        .collect())
+}
+
+#[test]
+fn bar() {
+    let pattern = Regex::new(r"(stash@\{[0-9]+\}): (On [^\n]*)").unwrap();
+    let str = "stash@{0}: On test_branch: gud_local_changes:test_branch
+    stash@{1}: On master: gud_local_changes:master
+    ";
+
+    for c in pattern.captures_iter(str) {
+        println!("{:?}", c);
+    }
 }
 
 // pub fn git_credentials_callback(
