@@ -65,14 +65,25 @@ pub enum Command {
     Undo,
     Redo,
     Rewrite,
-    Rebase, // (on some other branch (guarantee it's the original branch?))
+
+    /// Rebase the current branch on some other branch
+    Rebase {
+        /// Name for the new branch
+        #[arg()]
+        other_branch: String,
+    },
 }
 
 impl Command {
     pub fn perform(self) -> Result<(), String> {
         match self {
             Command::Clone { url } => git(&["clone", &url]),
-            Command::Sync => sync(),
+            Command::Sync => {
+                let sync_info = sync()?;
+                print_sync_info(sync_info);
+
+                Ok(())
+            }
             Command::Status => {
                 let branch_name = get_branch_name()?;
                 let output = git_with_output(&["status", "--short"])?;
@@ -88,19 +99,34 @@ impl Command {
             Command::Clear => git(&["reset", "--hard"]),
             Command::Commit { message } => {
                 git(&["commit", "-m", &message])?;
-                sync()
+                let sync_info = sync()?;
+                print_sync_info(sync_info);
+
+                Ok(())
             }
-            Command::Switch { branch_name } => {
-                stash_branch_changes()?;
-                git(&["checkout", &branch_name])?;
-                pop_stashed_branch_changes()
-            }
+            Command::Switch { branch_name } => switch(&branch_name),
             Command::Branch { branch_name } => todo!(),
             Command::Undo => todo!(),
             Command::Redo => todo!(),
             Command::Rewrite => todo!(),
-            Command::Rebase => todo!(),
+            Command::Rebase { other_branch } => {
+                let current_branch = get_branch_name()?;
+                switch(&other_branch)?;
+                sync()?;
+                switch(&current_branch)?;
+                git(&["rebase", &other_branch])?; // TODO: Handle merge conflicts somehow
+
+                Ok(())
+            }
         }
+    }
+}
+
+fn print_sync_info((ahead, behind): (usize, usize)) {
+    if ahead == 0 && behind == 0 {
+        println!("Already up to date");
+    } else {
+        println!("Pushed {} commits and pulled {} commits", ahead, behind);
     }
 }
 
@@ -129,20 +155,21 @@ fn git_with_output(args: &[&str]) -> Result<String, String> {
         .map_err(|e| e.to_string())
 }
 
-fn sync() -> Result<(), String> {
+fn sync() -> Result<(usize, usize), String> {
     git(&["fetch"])?;
     let ahead = commits_ahead()?;
     let behind = commits_behind()?;
 
-    if ahead == 0 && behind == 0 {
-        println!("Already up to date");
-    } else {
-        git(&["pull", "--rebase"])?;
-        git(&["push"])?;
-        println!("Pushed {} commits and pulled {} commits", ahead, behind);
-    }
+    git(&["pull", "--rebase"])?;
+    git(&["push"])?;
 
-    Ok(())
+    Ok((ahead, behind))
+}
+
+fn switch(branch_name: &str) -> Result<(), String> {
+    stash_branch_changes()?;
+    git(&["checkout", branch_name])?;
+    pop_stashed_branch_changes()
 }
 
 fn stage(pattern: &str) -> Result<(), String> {
